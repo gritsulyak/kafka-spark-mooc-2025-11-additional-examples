@@ -18,13 +18,13 @@
 package org.apache.spark.examples.sql.streaming
 
 import java.util.UUID
-
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.streaming.Trigger
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
- * Usage: StructuredKafkaWordCount <bootstrap-servers> <subscribe-type> <topics>
- *     [<checkpoint-location>]
+ * Usage: StructuredKafkaWordCount &lt bootstrap-servers &gt [subscribe-type] [topics]
+ *     [checkpoint-location]
  *   <bootstrap-servers> The Kafka "bootstrap.servers" configuration. A
  *   comma-separated list of host:port.
  *   <subscribe-type> There are three kinds of type, i.e. 'assign', 'subscribe',
@@ -58,12 +58,29 @@ object StructuredKafkaWordCount {
     val checkpointLocation =
       if (args.length > 3) args(3) else "/tmp/temporary-" + UUID.randomUUID.toString
 
+
+    // Решение для Windows - установка переменных программно
+    System.setProperty("hadoop.home.dir", "C:\\hadoop")  // Укажите ваш путь
+
+    // WE need hadoop to run locally!
+    //val tempHadoopDir = java.io.File.createTempFile("hadoop", "")
+    //tempHadoopDir.delete()
+    //tempHadoopDir.mkdirs()
+    //
+    //System.setProperty("hadoop.home.dir", tempHadoopDir.getAbsolutePath)
+
     val spark = SparkSession
       .builder
       .appName("StructuredKafkaWordCount")
+      .master("local[1]")
+      .config("spark.streaming.stopGracefullyOnShutdown", "true")
+      .config("spark.log.level", "ERROR")
+      .config("spark.sql.shuffle.partitions", "1")  // Чаще
+      .config("spark.default.parallelism", "1")
       .getOrCreate()
 
     import spark.implicits._
+
 
     // Create DataSet representing the stream of input lines from kafka
     val lines = spark
@@ -83,6 +100,7 @@ object StructuredKafkaWordCount {
       .outputMode("complete")
       .format("console")
       .option("checkpointLocation", checkpointLocation)
+      .trigger(Trigger.ProcessingTime("2 seconds"))  // Чаще
       .start()
 
     query.awaitTermination()
